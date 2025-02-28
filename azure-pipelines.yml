@@ -1,0 +1,97 @@
+trigger:
+  - none
+
+variables:
+- group: VMCredentials
+
+stages:
+  - stage: PackerBuild
+    jobs:
+      - job: Build
+        pool:
+          name: MyAgentPool
+        steps:
+        - task: PackerTool@0
+          displayName: Packer Setup
+          inputs:
+            version: 
+        - task: Packer@1
+          displayName: Packer Init
+          inputs:
+            connectedServiceType: 'azure'
+            azureSubscription: 'MyAzureConnection'
+            templatePath: '.\packer\'
+            command: 'init'
+        - task: Packer@1
+          displayName: Packer Build
+          inputs:
+            connectedServiceType: 'azure'
+            azureSubscription: 'MyAzureConnection'
+            templatePath: '.\packer\'
+            command: 'build'
+          env:
+              PKR_VAR_client_id: $(AZURE_CLIENT_ID)
+              PKR_VAR_client_secret: $(AZURE_CLIENT_SECRET)
+              PKR_VAR_subscription_id: $(AZURE_SUBSCRIPTION_ID)
+              PKR_VAR_tenant_id: $(AZURE_TENANT_ID)
+  - stage: TerraformBuild
+    jobs:
+      - job: Build
+        pool:
+          name: MyAgentPool
+        steps:
+         - task: TerraformInstaller@1
+           displayName: Terraform SetUp
+           inputs:
+             terraformVersion: 'latest'
+         - task: TerraformTaskV4@4
+           displayName: Terraform Init
+           inputs:
+             provider: 'azurerm'
+             command: 'init'
+             backendServiceArm: 'MyAzureConnection'
+             backendAzureRmResourceGroupName: 'PackerImage'
+             backendAzureRmStorageAccountName: 'avdtfstorage'
+             backendAzureRmContainerName: 'acsdemo-tfstate'
+             backendAzureRmKey: 'prod.terraform.tfstate'
+         - task: TerraformTaskV4@4
+           displayName: Terraform Validate
+           inputs:
+             provider: 'azurerm'
+             command: 'validate'
+           env:
+             TF_VAR_admin_username: $(ADMIN_USERNAME)
+             TF_VAR_admin_password: $(ADMIN_PASSWORD)
+         - task: TerraformTaskV4@4
+           displayName: Terraform Format
+           inputs:
+             provider: 'azurerm'
+             command: 'custom'
+             outputTo: 'console'
+             customCommand: 'fmt'
+             environmentServiceNameAzureRM: 'MyAzureConnection'
+         - task: TerraformTaskV4@4
+           displayName: Terraform Plan
+           inputs:
+             provider: 'azurerm'
+             command: 'plan'
+             commandOptions: '-out $(Build.SourcesDirectory)/tfplanfile'
+             environmentServiceNameAzureRM: 'MyAzureConnection'
+           env:
+             TF_VAR_admin_username: $(ADMIN_USERNAME)
+             TF_VAR_admin_password: $(ADMIN_PASSWORD)
+         - task: ArchiveFiles@2
+           displayName: Archive Files
+           inputs:
+             rootFolderOrFile: '$(Build.SourcesDirectory)'
+             includeRootFolder: false
+             archiveType: 'zip'
+             archiveFile: '$(Build.ArtifactStagingDirectory)/terraform-artifact.zip'
+             replaceExistingArchive: true
+         - task: PublishBuildArtifacts@1
+           inputs:
+             PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+             ArtifactName: 'terraform-artifact'
+             publishLocation: 'FilePath'
+             TargetPath: '\\vm1\artifact'
+          
