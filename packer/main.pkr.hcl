@@ -15,6 +15,9 @@ build {
     provisioner "powershell"{
       scripts = ["./packer/copy.ps1"]
     }
+provisioner "power;shell"{
+inline = ["Get-AppxPackage -Name *NotepadPlusPlus* | Remove-AppxPackage"]
+}
 
     provisioner "windows-restart" {
       restart_check_command = "powershell -command \"& {Write-Output 'Windows Restarted.'}\""
